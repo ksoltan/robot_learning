@@ -36,7 +36,7 @@ class DataLogger(object):
             if e.errno != errno.EEXIST:
                 raise
         rospy.loginfo("data save directory " + self.data_save_path)
-        rospy.Subscriber('extrapolated_scan', LaserScan, self.process_scan)
+        rospy.Subscriber('stable_scan', LaserScan, self.process_scan)
         rospy.Subscriber('camera/image_raw', Image, self.process_image)
         rospy.Subscriber('bump', Bump, self.process_bump)
         rospy.Subscriber('accel', Accel, self.process_accel)
@@ -107,15 +107,18 @@ class DataLogger(object):
                                'odom_orient_z',
                                'odom_orient_w']])
             while not rospy.is_shutdown():
-                stamp, x, y, lbutton_down, image = self.q.get(timeout=10)
+                stamp, x, y, lbutton_down, image = self.q.get(timeout=20)
 
                 # extrapolated scan so I don't know if it is or isn't)
                 scan = [float('Inf')]*361
-                if (self.last_ranges and abs(stamp - self.last_ranges[0]) <
-                        self.sensor_latency_tolerance):
+                #if (self.last_ranges and abs(stamp - self.last_ranges[0]) <
+                #        self.sensor_latency_tolerance):
+                if self.last_ranges == None:
+                    continue
+                if self.last_ranges != None:
                     scan = self.last_ranges[1]
-                else:
-                    print("TIME OUT LASER")
+                #else:
+                #    print("TIME OUT LASER")
                 cmd_vel = [float('Inf')]*2
                 if self.last_cmd_vel:
                     cmd_vel = self.last_cmd_vel[1]
