@@ -7,11 +7,11 @@ import glob
 from PIL import Image
 from scipy.misc import imread, imresize
 
-folder_name = 'amy_follow'
+folder_name = 'mydataset/'
 # Katya
-data_path = '/home/ksoltan/catkin_ws/src/robot_learning/data_processing_utilities/data/'
+# data_path = '/home/ksoltan/catkin_ws/src/robot_learning/data_processing_utilities/data/'
 # # Anil
-# data_path ='/home/anil/catkin_ws/src/comprobo18/robot_learning/data_preparation/'
+data_path ='/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
 
 path = data_path + folder_name
 
@@ -43,12 +43,12 @@ for name in filenames:
     index += 1
 
 # Create numpy array of all x and y mouse positions
-# METADATA_CSV = data_path + folder_name + '/' + metadata_name
-# df = pd.read_csv(METADATA_CSV, ',')[['image_file_name', 'mouse_x', 'mouse_y']]
-# print(df.head())
-# print(df.info())
-#
-# SAVE_FILENAME = data_path + folder_name + '.npz'
-# np.savez_compressed(SAVE_FILENAME, imgs=images, mouse_x=df.mouse_x, mouse_y=df.mouse_y)
-# test_data = np.load(SAVE_FILENAME)
-# print(test_data['mouse_x'].shape)
+METADATA_CSV = data_path + folder_name + '/' + metadata_name
+df = pd.read_csv(METADATA_CSV, ',')[['image_file_name', 'mouse_x', 'mouse_y']]
+print(df.head())
+print(df.info())
+
+SAVE_FILENAME = data_path + folder_name + '_images' '.npz'
+np.savez_compressed(SAVE_FILENAME, imgs=images, mouse_x=df.mouse_x, mouse_y=df.mouse_y)
+test_data = np.load(SAVE_FILENAME)
+print(test_data['mouse_x'].shape)
