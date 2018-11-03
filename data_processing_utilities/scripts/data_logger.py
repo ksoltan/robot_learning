@@ -4,7 +4,7 @@ import rospy
 import Queue as queue
 from sensor_msgs.msg import LaserScan, Image
 from neato_node.msg import Bump, Accel
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped
 from cv_bridge import CvBridge
 import cv2
 import rospkg
@@ -12,10 +12,12 @@ import errno
 import os
 import csv
 import tf
+from ml_tag import MLTag
 
 
 class DataLogger(object):
     def __init__(self):
+        self.last_object_from_scan_x, self.last_object_from_scan_y = 0, 0
         self.last_ranges = None
         self.last_bump = None
         self.last_accel = None
@@ -41,10 +43,15 @@ class DataLogger(object):
         rospy.Subscriber('bump', Bump, self.process_bump)
         rospy.Subscriber('accel', Accel, self.process_accel)
         rospy.Subscriber('cmd_vel', Twist, self.process_cmd_vel)
+        rospy.Subscriber('object_from_scan', PoseStamped, self.process_object_from_scan)
+
         self.tf_listener = tf.TransformListener()
         self.b = CvBridge()
         cv2.namedWindow('camera image')
         cv2.setMouseCallback('camera image', self.process_mouse_event)
+
+    def process_object_from_scan(self, msg):
+        self.last_object_from_scan_x, self.last_object_from_scan_y = msg.pose.position.x, msg.pose.position.y
 
     def process_scan(self, msg):
         self.last_ranges = (msg.header.stamp, msg.ranges)
@@ -105,7 +112,8 @@ class DataLogger(object):
                               ['odom_orient_x',
                                'odom_orient_y',
                                'odom_orient_z',
-                               'odom_orient_w']])
+                               'odom_orient_w'] +
+                               ['object_from_scan_x', 'object_from_scan_y']])
             while not rospy.is_shutdown():
                 stamp, x, y, lbutton_down, image = self.q.get(timeout=20)
 
@@ -145,6 +153,8 @@ class DataLogger(object):
                                                                   transform_ts)
                     print trans
 
+                object_from_scan = [self.last_object_from_scan_x, self.last_object_from_scan_y]
+
                 cv2.imshow("camera image", image)
                 key = cv2.waitKey(5) & 0xFF
 
@@ -162,7 +172,8 @@ class DataLogger(object):
                                   list(bump) +
                                   list(accel) +
                                   list(trans) +
-                                  list(rot)])
+                                  list(rot) +
+                                  list(object_from_scan)])
                 image_count += 1
 
 

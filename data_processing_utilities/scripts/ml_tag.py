@@ -25,7 +25,7 @@ class MLTag(object):
     # TODO: Add logic if robot does not see person
     # TODO: Tag logic
 
-    def __init__(self, model_name='convolutional_model_v2_half.h5'):
+    def __init__(self, model_name='convolutional_model_v3_double.h5'):
         rospy.init_node("ml_tag_node")
 
         self.my_model = load_model(model_name)
@@ -37,6 +37,9 @@ class MLTag(object):
         self.camera_subscriber = rospy.Subscriber("/camera/image_raw/compressed", CompressedImage, self.process_image)
         self.scan_subscriber = rospy.Subscriber("/scan", LaserScan, self.process_scan)
         self.bump_subscriber = rospy.Subscriber("/bump", Bump, self.process_bump)
+
+        # Publisher for logging
+        self.object_from_scan_publisher = rospy.Publisher("/object_from_scan", PoseStamped, queue_size=10)
 
         # Transform
         self.tf_listener = tf.TransformListener()
@@ -90,8 +93,10 @@ class MLTag(object):
             # Could fix this by not doing image processing in the callback, and in the main run loop.
             # https://stackoverflow.com/questions/47115946/tensor-is-not-an-element-of-this-graph
             predicted = self.my_model.predict(img_tensor)
+            print(predicted)
             # print("Predicted mouse: {}, shape: {}".format(predicted, predicted.shape))
-            self.my_model_object_marker.pose.position.x = predicted[0]
+            self.my_model_object_marker.pose.position.x = predicted[0][0]
+            self.my_model_object_marker.pose.position.y = predicted[0][1]
             self.model_object_publisher.publish(self.my_model_object_marker)
 
     def process_scan(self, scan_msg):
@@ -104,8 +109,8 @@ class MLTag(object):
 
     def find_poses_in_scan(self):
         # Use front field of view of the robot's lidar to detect a person's x, y offset
-        field_of_view = 35
-        maximum_range = 3 # m
+        field_of_view = 40
+        maximum_range = 2 # m
 
         # Cycle through ranges and filter out 0 or too far away measurements
         # Calculate the x, y coordinate of the point the lidar detected
@@ -132,6 +137,7 @@ class MLTag(object):
                     p.pose.position.y = y_pos
 
                     p_base_link = self.tf_listener.transformPose('base_link', p)
+                    print("{}, {} at angle {}".format(p_base_link.pose.position.x, p_base_link.pose.position.y, math.degrees(theta)))
 
                     # Only care about the pose
                     poses.append(p_base_link.pose)
@@ -144,15 +150,26 @@ class MLTag(object):
     def find_object_from_scan(self):
         # Get the x, y coordinates of objects in the field of view
         poses = self.find_poses_in_scan()
-        min_points_for_object = 5
+        min_points_for_object = 3
 
         if(len(poses) < min_points_for_object):
             # Not enough points
-            return (-1, -1)
+            pose_stamped = PoseStamped()
+            pose_stamped.header.stamp = rospy.Time.now()
+            pose_stamped.header.frame_id = "base_link"
+            self.object_from_scan_publisher.publish(pose_stamped)
+            return (0, 0)
 
         # Not the most efficient list traversal (double), but we don't have that many values.
         center_of_mass = (sum([pose.position.x for pose in poses]) * 1.0 / len(poses),
                             sum([pose.position.y for pose in poses]) * 1.0 / len(poses))
+
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = rospy.Time.now()
+        pose_stamped.header.frame_id = "base_link"
+        pose_stamped.pose.position.x = center_of_mass[0]
+        pose_stamped.pose.position.y = center_of_mass[1]
+        self.object_from_scan_publisher.publish(pose_stamped)
 
         return center_of_mass
 
