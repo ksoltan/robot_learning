@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from keras.models import load_model
-import tensorflow as tf
+import tensorflow as tensorflow
 
 # import os
 import numpy as np
@@ -17,6 +17,8 @@ import cv2 # OpenCV
 from sensor_msgs.msg import CompressedImage, LaserScan
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PoseArray, Point, PoseStamped, Pose, PoseWithCovarianceStamped
+from neato_node.msg import Bump
+import tf
 
 class MLTag(object):
     # TODO: Add cmd_vel command based on where person supposedly is
@@ -27,12 +29,19 @@ class MLTag(object):
         rospy.init_node("ml_tag_node")
 
         self.my_model = load_model(model_name)
-        self.my_graph = tf.get_default_graph()
+        self.my_graph = tensorflow.get_default_graph()
         self.scan_ranges = []
+        self.is_tagger = True # Switch state based on whether robot is tagging or running away
+        self.sees_person = False
 
         self.camera_subscriber = rospy.Subscriber("/camera/image_raw/compressed", CompressedImage, self.process_image)
         self.scan_subscriber = rospy.Subscriber("/scan", LaserScan, self.process_scan)
+        self.bump_subscriber = rospy.Subscriber("/bump", Bump, self.process_bump)
 
+        # Transform
+        self.tf_listener = tf.TransformListener()
+
+        # Visuzaliations
         self.position_publisher = rospy.Publisher('/positions_pose_array', PoseArray, queue_size=10)
         self.position_pose_array = PoseArray()
         self.position_pose_array.header.frame_id = "base_link"
@@ -59,7 +68,6 @@ class MLTag(object):
 
 
     def process_image(self, compressed_image_msg):
-        print("Got image?")
         # Display compressed image:
         # http://wiki.ros.org/rospy_tutorials/Tutorials/WritingImagePublisherSubscriber
         #### direct conversion to CV2 ####
@@ -91,57 +99,67 @@ class MLTag(object):
         self.visualize_positions_in_scan()
         self.visualize_object_from_scan()
 
-    def find_positions_in_scan(self):
+    def process_bump(self, bump_msg):
+        pass
+
+    def find_poses_in_scan(self):
         # Use front field of view of the robot's lidar to detect a person's x, y offset
         field_of_view = 35
         maximum_range = 3 # m
 
         # Cycle through ranges and filter out 0 or too far away measurements
         # Calculate the x, y coordinate of the point the lidar detected
-        x_positions = []
-        y_positions = []
+        poses = []
 
         for angle in range(-1 * field_of_view, field_of_view):
             r = self.scan_ranges[angle]
             # print("angle: {}, r = {}".format(angle, r))
             if(r > 0 and r < maximum_range):
-                # Convert angle to radians. Change negative angle to positive to output negative cos.
-                # theta = math.radians(angle) if angle > 0 else math.radians(90 + angle)
-                # Calculate the x, y coordinate
-                theta = math.radians(angle)
-                x_pos = r * math.cos(theta)
-                y_pos = r * math.sin(theta)
-                if(angle < 0):
-                    x_pos != -1
-                # print("x, y = {}, {} at angle = {}. theta = {}, r = {}".format(x_pos, y_pos, angle, math.degrees(theta), r))
+                try:
+                    # Confirm that transform exists.
+                    (trans,rot) = self.tf_listener.lookupTransform('/base_link', '/base_laser_link', rospy.Time(0))
+                    # Convert angle to radians. Adjust it to compensate for lidar placement.
+                    theta = math.radians(angle + 180)
+                    x_pos = r * math.cos(theta)
+                    y_pos = r * math.sin(theta)
 
-                x_positions.append(x_pos)
-                y_positions.append(y_pos)
-        return (x_positions, y_positions)
+                    # Use transform for correct positioning in the x, y plane.
+                    p = PoseStamped()
+                    p.header.stamp = rospy.Time.now()
+                    p.header.frame_id = 'base_laser_link'
+
+                    p.pose.position.x = x_pos
+                    p.pose.position.y = y_pos
+
+                    p_base_link = self.tf_listener.transformPose('base_link', p)
+
+                    # Only care about the pose
+                    poses.append(p_base_link.pose)
+
+                except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                    continue
+        # Return a list of poses (no header)
+        return poses
 
     def find_object_from_scan(self):
         # Get the x, y coordinates of objects in the field of view
-        x_positions, y_positions = self.find_positions_in_scan()
+        poses = self.find_poses_in_scan()
+        min_points_for_object = 5
 
-        if(len(x_positions) < 5 or len(x_positions) != len(y_positions)):
+        if(len(poses) < min_points_for_object):
             # Not enough points
             return (-1, -1)
 
-        center_of_mass = (sum(x_positions) * 1.0 / len(x_positions), sum(y_positions) * 1.0 / len(y_positions))
+        # Not the most efficient list traversal (double), but we don't have that many values.
+        center_of_mass = (sum([pose.position.x for pose in poses]) * 1.0 / len(poses),
+                            sum([pose.position.y for pose in poses]) * 1.0 / len(poses))
 
         return center_of_mass
 
     def visualize_positions_in_scan(self):
-        x_positions, y_positions = self.find_positions_in_scan()
-        all_poses = []
+        poses = self.find_poses_in_scan()
 
-        for i in range(len(x_positions)):
-            pose = Pose()
-            pose.position.x = x_positions[i]
-            pose.position.y = y_positions[i]
-            all_poses.append(pose)
-
-        self.position_pose_array.poses = all_poses
+        self.position_pose_array.poses = poses
         self.position_publisher.publish(self.position_pose_array)
 
     def visualize_object_from_scan(self):
