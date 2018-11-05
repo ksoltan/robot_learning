@@ -26,6 +26,7 @@ class DataLogger(object):
         self.last_x, self.last_y = -1, -1
         self.q = queue.Queue()
         self.sensor_latency_tolerance = rospy.Duration(0.2)
+        self.is_first_img = True
 
         rospy.init_node('data_logger')
         r = rospkg.RosPack()
@@ -80,15 +81,25 @@ class DataLogger(object):
                            (msg.accelXInG, msg.accelYInG, msg.accelZInG))
 
     def process_image(self, m):
-        if(self.last_ranges != None and abs(self.last_ranges[0] - m.header.stamp) < self.sensor_latency_tolerance):
-            im = self.b.imgmsg_to_cv2(m, desired_encoding="bgr8")
-            print(im.shape)
-            self.q.put((m.header.stamp,
-                        self.last_x,
-                        self.last_y,
-                        self.lbutton_down_registered,
-                        im))
-            self.lbutton_down_registered = False
+        # if(self.is_first_img):
+        im = self.b.imgmsg_to_cv2(m, desired_encoding="bgr8")
+        print(im.shape)
+        self.q.put((m.header.stamp,
+                    self.last_x,
+                    self.last_y,
+                    self.lbutton_down_registered,
+                    im))
+        self.lbutton_down_registered = False
+        #     self.is_first_img = False
+        # elif(self.last_ranges != None and abs(self.last_ranges[0] - m.header.stamp) < self.sensor_latency_tolerance):
+        #     im = self.b.imgmsg_to_cv2(m, desired_encoding="bgr8")
+        #     print(im.shape)
+        #     self.q.put((m.header.stamp,
+        #                 self.last_x,
+        #                 self.last_y,
+        #                 self.lbutton_down_registered,
+        #                 im))
+        #     self.lbutton_down_registered = False
 
     def run(self):
         with open(self.data_save_path + "/metadata.csv", "w") as csv_file:
@@ -117,6 +128,7 @@ class DataLogger(object):
                                'odom_orient_w'] +
                                ['object_from_scan_x', 'object_from_scan_y', 'object_from_scan_stamp', 'lidar_stamp']])
             while not rospy.is_shutdown():
+                print("Hi")
                 stamp, x, y, lbutton_down, image = self.q.get(timeout=20)
 
                 # extrapolated scan so I don't know if it is or isn't)
