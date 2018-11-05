@@ -49,7 +49,8 @@ def center_of_mass(x, y):
         plt.plot(x, y, 'ro')
         plt.plot(0,0, 'bo', markersize=15)
         plt.plot(x_cord, y_cord, 'go', markersize=15)
-        # plt.show()
+        plt.ylim(-2,2)
+        plt.xlim(-2,2)        # plt.show()
         return (x_cord, y_cord)
 
 def resize_image(img_name):
@@ -72,7 +73,8 @@ def resize_image(img_name):
 if __name__ == '__main__':
     # location definitions
     data_path ='/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
-    folder_name = 'latest_person'
+    folder_name = 'anil_shining'
+    # folder_name = 'latest_person'
     path = data_path + folder_name + '/'
     metadata_csv = data_path + folder_name + '/' + 'metadata.csv'
 
@@ -82,18 +84,38 @@ if __name__ == '__main__':
 
     # pull from metadata
     array_form = np.genfromtxt(metadata_csv, delimiter=",")
-    lidar_all = array_form[:, 6:366]
-    times = array_form[:,0]
+    lidar_all = array_form[:,6:366]
+    pic_times = array_form[:,0]
+    lidar_times = array_form[:,-1]
     images = []
     object_xs = []
     object_ys = []
 
-    unique = 0
-
+    i_s = []
+    j_s = []
     # loop through all images
-    for i in range(lidar_all.shape[0]):
-        print(times[i+1]-times[i])
-        scan_now = lidar_all[i] # scan data for this index
+    for i in range(lidar_all.shape[0]-26):
+        for j in range(i,i+25):
+            delta = lidar_times[j]-pic_times[i]
+            if abs(delta) < 0.025:
+                i_s.append(i)
+                j_s.append(j)
+
+                # print('pic', i)
+                # print('lid', j)
+                # print('delta', delta)
+                # print('------------------')
+                break
+
+    imgs_a = []
+    xs_a = []
+    ys_a = []
+
+    for i in range(len(i_s)):
+        img_ind = i_s[i]
+        lid_ind = j_s[i]
+
+        scan_now = lidar_all[lid_ind] # scan data for this index
 
         # process if scan isn't NaN (laser hasn't fired yet)
         if not np.isnan(scan_now[10]):
@@ -102,30 +124,24 @@ if __name__ == '__main__':
 
             #  only add if CoM is defined, AKA object is in frame
             if xp != 0:
-                if unique != xp:
-                    print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+                print(pic_times[img_ind]-lidar_times[lid_ind], xp, yp, round(math.degrees(math.atan2(xp, yp)),2))
 
-                    unique = xp
+                # add image
+                img_name = filenames[img_ind]
+                img_np = resize_image(img_name)
+                imgs_a.append(img_np)
 
-                    # add image
-                    img_name = filenames[i]
-                    img_np = resize_image(img_name)
-                    images.append(img_np)
+                # add object position
+                xs_a.append(xp)
+                ys_a.append(yp)
 
-                    # add object position
-                    object_xs.append(xp)
-                    object_ys.append(yp)
+                # verify
+                # plt.show()
 
-                    # verify
-                    plt.imshow(img_np)
-                    plt.show()
+                plt.imshow(img_np)
+                # plt.show()
 
-
-
-    adj_img = []
-    adj_xs = []
-    adj_ys = []
-
+    print(len(imgs_a))
     # save all data
     save_path = data_path + folder_name + '_data' '.npz'
-    np.savez_compressed(save_path, imgs=images, object_x=object_xs, object_y=object_ys)
+    np.savez_compressed(save_path, imgs=imgs_a, object_x=xs_a, object_y=ys_a)
