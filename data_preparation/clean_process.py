@@ -83,14 +83,16 @@ if __name__ == '__main__':
     # pull from metadata
     array_form = np.genfromtxt(metadata_csv, delimiter=",")
     lidar_all = array_form[:, 6:366]
-
-    # initialize key data lists
+    times = array_form[:,0]
     images = []
     object_xs = []
     object_ys = []
 
+    unique = 0
+
     # loop through all images
     for i in range(lidar_all.shape[0]):
+        print(times[i+1]-times[i])
         scan_now = lidar_all[i] # scan data for this index
 
         # process if scan isn't NaN (laser hasn't fired yet)
@@ -100,21 +102,29 @@ if __name__ == '__main__':
 
             #  only add if CoM is defined, AKA object is in frame
             if xp != 0:
-                # TODO: ISSUE - lidar sampling is much less frequent than image
-                # print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+                if unique != xp:
+                    print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
 
-                # add image
-                img_name = filenames[i]
-                img_np = resize_image(img_name)
-                images.append(img_np)
+                    unique = xp
 
-                # add object position
-                object_xs.append(xp)
-                object_ys.append(yp)
+                    # add image
+                    img_name = filenames[i]
+                    img_np = resize_image(img_name)
+                    images.append(img_np)
 
-                # verify
-                plt.imshow(img_np)
-                # plt.show()
+                    # add object position
+                    object_xs.append(xp)
+                    object_ys.append(yp)
+
+                    # verify
+                    plt.imshow(img_np)
+                    plt.show()
+
+
+
+    adj_img = []
+    adj_xs = []
+    adj_ys = []
 
     # save all data
     save_path = data_path + folder_name + '_data' '.npz'
