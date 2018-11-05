@@ -17,7 +17,7 @@ from ml_tag import MLTag
 
 class DataLogger(object):
     def __init__(self):
-        self.last_object_from_scan_x, self.last_object_from_scan_y = 0, 0
+        self.last_object_from_scan_x, self.last_object_from_scan_y, self.last_object_from_scan_stamp = 0, 0, 0
         self.last_ranges = None
         self.last_bump = None
         self.last_accel = None
@@ -25,7 +25,7 @@ class DataLogger(object):
         self.lbutton_down_registered = False
         self.last_x, self.last_y = -1, -1
         self.q = queue.Queue()
-        self.sensor_latency_tolerance = rospy.Duration(0.5)
+        self.sensor_latency_tolerance = rospy.Duration(0.2)
 
         rospy.init_node('data_logger')
         r = rospkg.RosPack()
@@ -52,6 +52,7 @@ class DataLogger(object):
 
     def process_object_from_scan(self, msg):
         self.last_object_from_scan_x, self.last_object_from_scan_y = msg.pose.position.x, msg.pose.position.y
+        self.last_object_from_scan_stamp = msg.header.stamp
 
     def process_scan(self, msg):
         self.last_ranges = (msg.header.stamp, msg.ranges)
@@ -79,14 +80,15 @@ class DataLogger(object):
                            (msg.accelXInG, msg.accelYInG, msg.accelZInG))
 
     def process_image(self, m):
-        im = self.b.imgmsg_to_cv2(m, desired_encoding="bgr8")
-        print(im.shape)
-        self.q.put((m.header.stamp,
-                    self.last_x,
-                    self.last_y,
-                    self.lbutton_down_registered,
-                    im))
-        self.lbutton_down_registered = False
+        if(self.last_ranges != None and abs(self.last_ranges[0] - m.header.stamp) < self.sensor_latency_tolerance):
+            im = self.b.imgmsg_to_cv2(m, desired_encoding="bgr8")
+            print(im.shape)
+            self.q.put((m.header.stamp,
+                        self.last_x,
+                        self.last_y,
+                        self.lbutton_down_registered,
+                        im))
+            self.lbutton_down_registered = False
 
     def run(self):
         with open(self.data_save_path + "/metadata.csv", "w") as csv_file:
@@ -113,16 +115,18 @@ class DataLogger(object):
                                'odom_orient_y',
                                'odom_orient_z',
                                'odom_orient_w'] +
-                               ['object_from_scan_x', 'object_from_scan_y']])
+                               ['object_from_scan_x', 'object_from_scan_y', 'object_from_scan_stamp', 'lidar_stamp']])
             while not rospy.is_shutdown():
                 stamp, x, y, lbutton_down, image = self.q.get(timeout=20)
 
                 # extrapolated scan so I don't know if it is or isn't)
                 scan = [float('Inf')]*361
-                #if (self.last_ranges and abs(stamp - self.last_ranges[0]) <
+                # if (self.last_ranges and abs(stamp - self.last_ranges[0]) <
                 #        self.sensor_latency_tolerance):
                 if self.last_ranges == None:
                     continue
+
+                # if (self.last_ranges != None and abs(stamp - self.last_ranges[0]) < self.sensor_latency_tolerance):
                 if self.last_ranges != None:
                     scan = self.last_ranges[1]
                 #else:
@@ -153,7 +157,9 @@ class DataLogger(object):
                                                                   transform_ts)
                     print trans
 
-                object_from_scan = [self.last_object_from_scan_x, self.last_object_from_scan_y]
+                lidar_stamp = self.last_ranges[0].to_sec()
+                object_from_scan = [self.last_object_from_scan_x, self.last_object_from_scan_y, self.last_object_from_scan_stamp.to_sec(), lidar_stamp]
+                print(object_from_scan)
 
                 cv2.imshow("camera image", image)
                 key = cv2.waitKey(5) & 0xFF

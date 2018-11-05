@@ -16,7 +16,7 @@ def process_scan(ranges):
     output: lists of x and y points within viewing angle and range
     """
     max_r = 1.5
-    view_angle = int(70/2)     # only look at points in the forwardmost 70 degs
+    view_angle = int(70 / 2)     # only look at points in the forwardmost 70 degs
     infront = range(-view_angle, view_angle)
     # ranges[0:int(view_angle/2)]+ranges[int(360-view_angle/2):360]
     xs = []
@@ -24,11 +24,11 @@ def process_scan(ranges):
 
     # loop through and grab points in desired view range
     for i in range(-view_angle, view_angle):
-        if ranges[i] !=0:
-            theta = math.radians(90+i)
+        if ranges[i] != 0:
+            theta = math.radians(90 + i)
             r = ranges[i]
-            xf = math.cos(theta)*r
-            yf = math.sin(theta)*r
+            xf = r * math.cos(theta)
+            yf = r * math.sin(theta)
             xs.append(xf)
             ys.append(yf)
 
@@ -42,13 +42,13 @@ def center_of_mass(x, y):
     output: spatial x and y coordinate of the CoM
     """
     if len(x) < 4:     # if below a threshold of grouped points
-        return(0, 0)   # TODO pick a return value for poor scans
+        return(np.inf, np.inf)
     else:
         x_cord = sum(x)/len(x)
         y_cord = sum(y)/len(y)
-        plt.plot(x, y, 'ro')
-        plt.plot(0,0, 'bo', markersize=15)
-        plt.plot(x_cord, y_cord, 'go', markersize=15)
+        # plt.plot(x, y, 'ro')
+        # plt.plot(0,0, 'bo', markersize=15)
+        # plt.plot(x_cord, y_cord, 'go', markersize=15)
         # plt.show()
         return (x_cord, y_cord)
 
@@ -71,8 +71,11 @@ def resize_image(img_name):
 
 if __name__ == '__main__':
     # location definitions
-    data_path ='/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
-    folder_name = 'latest_person'
+     # Anil
+    # data_path = '/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
+    # Katya
+    data_path = '/home/ksoltan/catkin_ws/src/robot_learning/data_processing_utilities/data/'
+    folder_name = 'test_data_faster'
     path = data_path + folder_name + '/'
     metadata_csv = data_path + folder_name + '/' + 'metadata.csv'
 
@@ -84,13 +87,19 @@ if __name__ == '__main__':
     array_form = np.genfromtxt(metadata_csv, delimiter=",")
     lidar_all = array_form[:, 6:366]
 
+    df = pd.read_csv(metadata_csv, ',')[['stamp', 'object_from_scan_x', 'object_from_scan_y', 'object_from_scan_stamp', 'lidar_stamp']]
+    ml_tag_object_xs = []
+    ml_tag_object_ys = []
+    ml_tag_object_times = []
+
     # initialize key data lists
     images = []
     object_xs = []
     object_ys = []
 
     # loop through all images
-    for i in range(lidar_all.shape[0]):
+    for i in range(lidar_all.shape[0] - 2):
+        print("{}/{}...".format(i, lidar_all.shape[0]))
         scan_now = lidar_all[i] # scan data for this index
 
         # process if scan isn't NaN (laser hasn't fired yet)
@@ -99,23 +108,34 @@ if __name__ == '__main__':
             xp, yp = center_of_mass(points_x, points_y)
 
             #  only add if CoM is defined, AKA object is in frame
-            if xp != 0:
-                # TODO: ISSUE - lidar sampling is much less frequent than image
-                # print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+            if xp != np.inf:
+                time_scan = df.lidar_stamp[i]
+                time_img = df.stamp[i]
+                print("Time diff: {}".format(time_scan - time_img))
 
-                # add image
-                img_name = filenames[i]
-                img_np = resize_image(img_name)
-                images.append(img_np)
+                # Use only images taken around the same time lidar is published.
+                if(abs(time_scan - time_img) < 0.5):
+                    # Use this value.
+                    # print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
 
-                # add object position
-                object_xs.append(xp)
-                object_ys.append(yp)
+                    # add image
+                    img_name = filenames[i]
+                    img_np = resize_image(img_name)
+                    images.append(img_np)
 
-                # verify
-                plt.imshow(img_np)
-                # plt.show()
+                    # add object position
+                    object_xs.append(xp)
+                    object_ys.append(yp)
+
+                    # verify
+                    plt.imshow(img_np)
+                    # plt.show()
+
+                    # Check the time stamp of the ml_tag prediction.
+                    ml_tag_object_times.append(time_scan - df.object_from_scan_stamp[i])
+                    ml_tag_object_xs.append(df.object_from_scan_x[i])
+                    ml_tag_object_ys.append(df.object_from_scan_y[i])
 
     # save all data
     save_path = data_path + folder_name + '_data' '.npz'
-    np.savez_compressed(save_path, imgs=images, object_x=object_xs, object_y=object_ys)
+    np.savez_compressed(save_path, imgs=images, object_x=object_xs, object_y=object_ys, ml_tag_object_x=ml_tag_object_xs, ml_tag_object_y=ml_tag_object_ys, ml_tag_object_stamp_diff=ml_tag_object_times)
