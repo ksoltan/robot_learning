@@ -69,13 +69,24 @@ def resize_image(img_name):
     array = np.array(resize)
     return array
 
+def find_corresponding_scan(image_time, scan_times, start_idx):
+    max_tolerance = 0.015
+    while start_idx < len(scan_times):
+        diff = abs(scan_times[start_idx] - image_time)
+        # print("Idx: {}, Diff: {}".format(start_idx, abs(scan_times[start_idx] - image_time)))
+        if diff < max_tolerance:
+            return (start_idx, diff)
+        start_idx += 1
+    return None
+
+
 if __name__ == '__main__':
     # location definitions
      # Anil
     # data_path = '/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
     # Katya
     data_path = '/home/ksoltan/catkin_ws/src/robot_learning/data_processing_utilities/data/'
-    folder_name = 'test_data_faster'
+    folder_name = 'anil_shining'
     path = data_path + folder_name + '/'
     metadata_csv = data_path + folder_name + '/' + 'metadata.csv'
 
@@ -93,49 +104,100 @@ if __name__ == '__main__':
     ml_tag_object_times = []
 
     # initialize key data lists
+    times = array_form[:,0]
+
     images = []
     object_xs = []
     object_ys = []
 
-    # loop through all images
-    for i in range(lidar_all.shape[0] - 2):
-        print("{}/{}...".format(i, lidar_all.shape[0]))
-        scan_now = lidar_all[i] # scan data for this index
+    unique = 0
+    all_diffs = []
 
-        # process if scan isn't NaN (laser hasn't fired yet)
-        if not np.isnan(scan_now[10]):
-            points_x, points_y = process_scan(scan_now)
-            xp, yp = center_of_mass(points_x, points_y)
+    for i in range(lidar_all.shape[0] - 1):
+        # print("{}/{}...".format(i, lidar_all.shape[0]))
+        image_time = df.stamp[i]
+        # res = find_corresponding_scan(image_time, df.lidar_stamp, i)
+        res = find_corresponding_scan(image_time, df.object_from_scan_stamp, i)
+        if(res != None):
+            scan_now_idx = res[0]
+            diff = res[1]
+            print("Found corresponding times: img: {}  >>> scan: {}".format(image_time, df.lidar_stamp[scan_now_idx]))
+            unique += 1
+            all_diffs.append(diff)
+            print("scan_now_idx: {}, img_idx: {}".format(scan_now_idx, i))
+            # scan_now = lidar_all[scan_now_idx]
+            # points_x, points_y = process_scan(scan_now)
+            # xp, yp = center_of_mass(points_x, points_y)
+            xp, yp = df.object_from_scan_x[scan_now_idx], df.object_from_scan_y[scan_now_idx]
+            print("xp: {}, yp: {}".format(xp, yp))
+            # If we have a center of mass
+            if(xp != np.inf):
+                print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+                # add image
+                img_name = filenames[i]
+                img_np = resize_image(img_name)
+                images.append(img_np)
 
-            #  only add if CoM is defined, AKA object is in frame
-            if xp != np.inf:
-                time_scan = df.lidar_stamp[i]
-                time_img = df.stamp[i]
-                print("Time diff: {}".format(time_scan - time_img))
+                # add object position
+                object_xs.append(xp)
+                object_ys.append(yp)
 
-                # Use only images taken around the same time lidar is published.
-                if(abs(time_scan - time_img) < 0.5):
-                    # Use this value.
-                    # print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+                # verify
+                plt.imshow(img_np)
+                plt.show()
 
-                    # add image
-                    img_name = filenames[i]
-                    img_np = resize_image(img_name)
-                    images.append(img_np)
+                # ml_tag_object_times.append(abs(image_time - df.object_from_scan_stamp[i]))
+                # ml_tag_object_xs.append(df.object_from_scan_x[i])
+                # ml_tag_object_ys.append(df.object_from_scan_y[i])
 
-                    # add object position
-                    object_xs.append(xp)
-                    object_ys.append(yp)
-
-                    # verify
-                    plt.imshow(img_np)
-                    # plt.show()
-
-                    # Check the time stamp of the ml_tag prediction.
-                    ml_tag_object_times.append(time_scan - df.object_from_scan_stamp[i])
-                    ml_tag_object_xs.append(df.object_from_scan_x[i])
-                    ml_tag_object_ys.append(df.object_from_scan_y[i])
+    print("Found {} corresponding scan - lidar".format(unique))
+    # # loop through all imagestest_data_faster
+    # for i in range(lidar_all.shape[0]):
+    #     # print("{}/{}...".format(i, lidar_all.shape[0]))
+    #     # print(times[i+1]-times[i])
+    #     scan_now = lidar_all[i] # scan data for this index
+    #
+    #     # process if scan isn't NaN (laser hasn't fired yet)
+    #     if not np.isnan(scan_now[10]):
+    #         points_x, points_y = process_scan(scan_now)
+    #         xp, yp = center_of_mass(points_x, points_y)
+    #
+    #         #  only add if CoM is defined, AKA object is in frame
+    #         if xp != 0:
+    #             if unique != xp:
+    #                 print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+    #
+    #                 unique = xp
+    #
+    #             time_scan = df.lidar_stamp[i]
+    #             time_img = df.stamp[i]
+    #             print("Time diff: {}".format(time_scan - time_img))
+    #
+    #             # Use only images taken around the same time lidar is published.
+    #             if(abs(time_scan - time_img) < 0.5):
+    #                 # Use this value.
+    #                 # print(i, xp, yp, math.degrees(math.atan2(xp, yp)))
+    #
+    #                 # add image
+    #                 img_name = filenames[i]
+    #                 img_np = resize_image(img_name)
+    #                 images.append(img_np)
+    #
+    #                 # add object position
+    #                 object_xs.append(xp)
+    #                 object_ys.append(yp)
+    #
+    #                 # verify
+    #                 plt.imshow(img_np)
+    #                 # plt.show()
+    #
+    #                 # Check the time stamp of the ml_tag prediction.
+    #                 ml_tag_object_times.append(time_scan - df.object_from_scan_stamp[i])
+    #                 ml_tag_object_xs.append(df.object_from_scan_x[i])
+    #                 ml_tag_object_ys.append(df.object_from_scan_y[i])
+    #
+    #                 plt.show()
 
     # save all data
-    save_path = data_path + folder_name + '_data' '.npz'
-    np.savez_compressed(save_path, imgs=images, object_x=object_xs, object_y=object_ys, ml_tag_object_x=ml_tag_object_xs, ml_tag_object_y=ml_tag_object_ys, ml_tag_object_stamp_diff=ml_tag_object_times)
+    # save_path = data_path + folder_name + '_data' '.npz'
+    # np.savez_compressed(save_path, imgs=images, object_x=object_xs, object_y=object_ys, ml_tag_object_x=ml_tag_object_xs, ml_tag_object_y=ml_tag_object_ys, ml_tag_object_stamp_diff=ml_tag_object_times)
