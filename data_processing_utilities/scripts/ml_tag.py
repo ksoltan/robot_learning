@@ -14,20 +14,20 @@ import math
 
 import rospy
 import cv2 # OpenCV
-from sensor_msgs.msg import Image, LaserScan
+from sensor_msgs.msg import CompressedImage, LaserScan
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PoseArray, Point, PoseStamped, Pose, PoseWithCovarianceStamped
 from neato_node.msg import Bump
 import tf
 
-from data_processing_utilities.msgs import ImageScanStamped
+# from data_processing_utilities.msgs import ImageScanStamped
 
 class MLTag(object):
     # TODO: Add cmd_vel command based on where person supposedly is
     # TODO: Add logic if robot does not see person
     # TODO: Tag logic
 
-    def __init__(self, model_name='convolutional_model_v3_double.h5'):
+    def __init__(self, model_name='convolutional_model_v5.h5'):
         rospy.init_node("ml_tag_node")
 
         self.my_model = load_model(model_name)
@@ -37,7 +37,7 @@ class MLTag(object):
         self.got_scan = False
         self.ready_to_process = False
 
-        self.camera_subscriber = rospy.Subscriber("/camera/image_raw", Image, self.process_image)
+        self.camera_subscriber = rospy.Subscriber("/camera/image_raw/compressed", CompressedImage, self.process_image)
         self.scan_subscriber = rospy.Subscriber("/scan", LaserScan, self.process_scan)
         self.bump_subscriber = rospy.Subscriber("/bump", Bump, self.process_bump)
 
@@ -52,9 +52,9 @@ class MLTag(object):
         self.position_pose_array = PoseArray()
         self.position_pose_array.header.frame_id = "base_link"
 
-        self.image_scan_publisher = rospy.Publisher('/image_scan_pose', ImageScanStamped, queue_size=10)
-        self.last_scan_msg = None
-        self.last_image_msg = None
+        # self.image_scan_publisher = rospy.Publisher('/image_scan_pose', ImageScanStamped, queue_size=10)
+        # self.last_scan_msg = None
+        # self.last_image_msg = None
 
         self.object_publisher = rospy.Publisher('/object_marker', Marker, queue_size=10)
         self.my_object_marker = Marker()
@@ -81,40 +81,42 @@ class MLTag(object):
         # Display compressed image:
         # http://wiki.ros.org/rospy_tutorials/Tutorials/WritingImagePublisherSubscriber
         #### direct conversion to CV2 ####
-        if(self.got_scan and not self.ready_to_process):
-            np_arr = np.fromstring(compressed_image_msg.data, np.uint8)
-            image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        # if(self.got_scan and not self.ready_to_process):
+        np_arr = np.fromstring(compressed_image_msg.data, np.uint8)
+        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-            # Show image
-            cv2.imshow('cv_img', image_np)
-            cv2.waitKey(2)
+        # Show image
+        cv2.imshow('cv_img', image_np)
+        cv2.waitKey(2)
 
-            # # Resize image
-            # height, width = image_np.shape[:2]
-            # new_width = 200
-            # new_height = int(height * new_width * 1.0 / width)
-            # image_np_resized = cv2.resize(image_np, (new_width, new_height), interpolation = cv2.INTER_CUBIC)
-            #
-            # img_tensor = np.expand_dims(image_np_resized, axis=0) # Add 4th dimension it expects
-            # with self.my_graph.as_default():
-            #     # Without using graph, it gives error: Tensor is not an element of this graph.
-            #     # Could fix this by not doing image processing in the callback, and in the main run loop.
-            #     # https://stackoverflow.com/questions/47115946/tensor-is-not-an-element-of-this-graph
-            #     predicted = self.my_model.predict(img_tensor)
-            #     print(predicted)
-            #     # print("Predicted mouse: {}, shape: {}".format(predicted, predicted.shape))
-            #     self.my_model_object_marker.pose.position.x = predicted[0][0]
-            #     self.my_model_object_marker.pose.position.y = predicted[0][1]
-            #     self.model_object_publisher.publish(self.my_model_object_marker)
-            self.last_image_msg = compressed_image_msg
-            self.got_scan = False
-            self.ready_to_process = True
+        # Resize image
+        height, width = image_np.shape[:2]
+        new_width = 200
+        new_height = int(height * new_width * 1.0 / width)
+        image_np_resized = cv2.resize(image_np, (new_width, new_height), interpolation = cv2.INTER_CUBIC)
+
+        img_tensor = np.expand_dims(image_np_resized, axis=0) # Add 4th dimension it expects
+        with self.my_graph.as_default():
+            # Without using graph, it gives error: Tensor is not an element of this graph.
+            # Could fix this by not doing image processing in the callback, and in the main run loop.
+            # https://stackoverflow.com/questions/47115946/tensor-is-not-an-element-of-this-graph
+            predicted = self.my_model.predict(img_tensor)
+            # print("Model predict: x: {}, y:{}, theta: {}".format(predicted[0][0], predicted[0][1], math.degrees(math.atan2(predicted[0][0], predicted[0][1]))))
+            self.my_model_object_marker.pose.position.x = predicted[0][0]
+            self.my_model_object_marker.pose.position.y = predicted[0][1]
+            self.model_object_publisher.publish(self.my_model_object_marker)
+            # self.last_image_msg = compressed_image_msg
+            # self.got_scan = False
+            # self.ready_to_process = True
 
     def process_scan(self, scan_msg):
-        if(not self.ready_to_process):
-            self.scan_ranges = scan_msg.ranges
-            self.last_scan_msg = scan_msg
-            self.got_scan = True
+        self.scan_ranges = scan_msg.ranges
+        self.visualize_positions_in_scan()
+        self.visualize_object_from_scan()
+        # if(not self.ready_to_process):
+        #     self.scan_ranges = scan_msg.ranges
+        #     self.last_scan_msg = scan_msg
+        #     self.got_scan = True
 
     def process_bump(self, bump_msg):
         pass
@@ -148,8 +150,19 @@ class MLTag(object):
                     p.pose.position.x = x_pos
                     p.pose.position.y = y_pos
 
+                    p_model = PoseStamped()
+                    p_model.header.stamp = rospy.Time.now()
+                    p_model.header.frame_id = 'base_laser_link'
+
+                    p_model.pose.position.x = self.my_model_object_marker.pose.position.x
+                    p_model.pose.position.y = self.my_model_object_marker.pose.position.y
+
+
                     p_base_link = self.tf_listener.transformPose('base_link', p)
-                    print("{}, {} at angle {}".format(p_base_link.pose.position.x, p_base_link.pose.position.y, math.degrees(theta)))
+                    p_model_base_link = self.tf_listener.transformPose('base_link', p_model)
+                    # print("{}, {} at angle {}".format(p_base_link.pose.position.x, p_base_link.pose.position.y, math.degrees(theta)))
+                    print("Lidar predict: x: {}, y:{}, theta: {}".format(p_base_link.pose.position.x, p_base_link.pose.position.y, math.degrees(theta)))
+                    print("Lidar predict: x: {}, y:{}, theta: {}".format(p_model_base_link.pose.position.x, p_model_base_link.pose.position.y, math.degrees(theta)))
 
                     # Only care about the pose
                     poses.append(p_base_link.pose)
@@ -201,23 +214,23 @@ class MLTag(object):
         self.object_publisher.publish(self.my_object_marker)
 
     def run(self):
-        while not rospy.is_shutdown():
-            if(self.ready_to_process):
-                self.visualize_positions_in_scan()
-                # Publish an image/scan msg
-                self.publish_image_scan()
+        # while not rospy.is_shutdown():
+        #     if(self.ready_to_process):
+        #         self.visualize_positions_in_scan()
+        #         # Publish an image/scan msg
+        #         self.publish_image_scan()
         rospy.spin()
 
-    def publish_image_scan(self):
-        msg = ImageScanStamped()
-        msg.header.stamp = rospy.Time.now()
-        msg.image = self.last_image_msg
-        msg.scan = self.last_scan_msg
-        x, y = self.visualize_object_from_scan()
-        msg.pose.position.x = x
-        msg.pose.position.y = y
-        self.image_scan_publisher.publish(msg)
-        self.ready_to_process = False
+    # def publish_image_scan(self):
+    #     msg = ImageScanStamped()
+    #     msg.header.stamp = rospy.Time.now()
+    #     msg.image = self.last_image_msg
+    #     msg.scan = self.last_scan_msg
+    #     x, y = self.visualize_object_from_scan()
+    #     msg.pose.position.x = x
+    #     msg.pose.position.y = y
+    #     self.image_scan_publisher.publish(msg)
+    #     self.ready_to_process = False
 
 if __name__ == "__main__":
     tag = MLTag()

@@ -46,18 +46,12 @@ def center_of_mass(x, y):
     else:
         x_cord = sum(x)/len(x)
         y_cord = sum(y)/len(y)
-<<<<<<< HEAD
-        # plt.plot(x, y, 'ro')
-        # plt.plot(0,0, 'bo', markersize=15)
-        # plt.plot(x_cord, y_cord, 'go', markersize=15)
-        # plt.show()
-=======
+
         plt.plot(x, y, 'ro')
         plt.plot(0,0, 'bo', markersize=15)
         plt.plot(x_cord, y_cord, 'go', markersize=15)
         plt.ylim(-2,2)
         plt.xlim(-2,2)        # plt.show()
->>>>>>> c92b407e191b769725897a9d214fa8c3ee979e23
         return (x_cord, y_cord)
 
 def resize_image(img_name):
@@ -91,10 +85,10 @@ def find_corresponding_scan(image_time, scan_times, start_idx):
 if __name__ == '__main__':
     # location definitions
     # # Katya
-    # data_path = '/home/ksoltan/catkin_ws/src/robot_learning/data_processing_utilities/data/'
+    data_path = '/home/ksoltan/catkin_ws/src/robot_learning/data_processing_utilities/data/'
     # Anil
-    data_path ='/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
-    folder_name = 'anil_shining'
+    # data_path ='/home/anil/catkin_ws/src/comprobo18/robot_learning/data_processing_utilities/data/'
+    folder_name = 'anil_shining_2'
     # folder_name = 'latest_person'
 
     path = data_path + folder_name + '/'
@@ -146,8 +140,8 @@ if __name__ == '__main__':
             xp, yp = center_of_mass(points_x, points_y)
 
             #  only add if CoM is defined, AKA object is in frame
-            if xp != 0:
-                print(pic_times[img_ind]-lidar_times[lid_ind], xp, yp, round(math.degrees(math.atan2(xp, yp)),2))
+            if xp != np.inf:
+                # print(pic_times[img_ind]-lidar_times[lid_ind], xp, yp, round(math.degrees(math.atan2(xp, yp)),2))
 
                 # add image
                 img_name = filenames[img_ind]

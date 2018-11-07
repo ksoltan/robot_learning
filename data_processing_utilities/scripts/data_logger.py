@@ -53,7 +53,7 @@ class DataLogger(object):
 
     def process_object_from_scan(self, msg):
         self.last_object_from_scan_x, self.last_object_from_scan_y = msg.pose.position.x, msg.pose.position.y
-        self.last_object_from_scan_stamp = msg.header.stamp
+        self.last_object_from_scan_stamp = msg.header.stamp.to_sec()
 
     def process_scan(self, msg):
         self.last_ranges = (msg.header.stamp, msg.ranges)
@@ -170,7 +170,7 @@ class DataLogger(object):
                     print trans
 
                 lidar_stamp = self.last_ranges[0].to_sec()
-                object_from_scan = [self.last_object_from_scan_x, self.last_object_from_scan_y, self.last_object_from_scan_stamp.to_sec(), lidar_stamp]
+                object_from_scan = [self.last_object_from_scan_x, self.last_object_from_scan_y, self.last_object_from_scan_stamp, lidar_stamp]
                 print(object_from_scan)
 
                 cv2.imshow("camera image", image)
