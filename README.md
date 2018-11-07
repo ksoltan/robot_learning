@@ -1,6 +1,8 @@
 # Robot Learning: Person Detection
 ## Project Goal
-The goal of our project was to use the Neato robot's camera to interact with a human and play the game of tag. The game starts with a state machine that qualifies the Neato as either “it” or “not it.” The mode dictates whether or not the Neato is actively chasing the person in its view or driving away. Switching between the modes is toggled with the bump sensor. We focused on the processing of camera data to locate a human in the image, outputting a position that the Neato would chase or avoid. The camera is first used to gather a training set of images to build a convolutional neural network for mapping a new image to a person’s position. This trained model would then be downloaded and used live on the Neato for locating the person and adjusting its linear and angular velocities appropriately. Due to challenges in collecting good data, our resulting model was not quite successful in calculating the position of the human in the image.
+The goal of our project was to use the Neato robot's camera to interact with a human and play the game of tag. The game starts with a state machine that qualifies the Neato as either “it” or “not it.” The mode dictates whether or not the Neato is actively chasing the person in its view or driving away. Switching between the modes is toggled with the bump sensor.
+
+We focused on the processing of camera data to locate a human in the image, outputting a position that the Neato would chase or avoid. The camera is first used to gather a training set of images to build a convolutional neural network for mapping a new image to a person’s position. This trained model would then be downloaded and used live on the Neato for locating the person and adjusting its linear and angular velocities appropriately. Due to challenges in collecting good data, our resulting model was not quite successful in calculating the position of the human in the image.
 
 # Approach
 To identify the position of a person relative to the robot from an image, we trained a multi-layered neural network with four convolution/max-pool layers and a final flatten/dense layer to output an x and y coordinate. We collected a data set of images taken from the Neato's camera and the approximate center of mass of the person based on an average of laser scan points in the frame of view of the camera. Because the image and lidar sampling happened at different rates, before training, each image was paired with a scan result with a maximum timestamp difference of 0.025s. Additionally, the images were scaled down to 200 x 150 pixels instead of 680 x 480. You can find our training code [here](https://colab.research.google.com/drive/1UaE06H4dS8kt_A7o_D8_NWij7EhDyHtn).
@@ -10,11 +12,11 @@ To identify the position of a person relative to the robot from an image, we tra
 
 The resulting model was unfortunately not very accurate, even on its own training data. There was an extremely high variability in the predicted person positions, as seen in the graphs below:
 
-Training Data:
+#### Training Data:
 ![](https://github.com/ksoltan/robot_learning/blob/master/documentation/predicted_x_train.png)
 ![](https://github.com/ksoltan/robot_learning/blob/master/documentation/predicted_y_train.png)
 
-Test Data:
+#### Test Data:
 ![](https://github.com/ksoltan/robot_learning/blob/master/documentation/predicted_x_test.png)
 ![](https://github.com/ksoltan/robot_learning/blob/master/documentation/predicted_y_test.png)
 
