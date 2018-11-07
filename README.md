@@ -7,8 +7,8 @@ We focused on the processing of camera data to locate a human in the image, outp
 # Approach
 To identify the position of a person relative to the robot from an image, we trained a multi-layered neural network with four convolution/max-pool layers and a final flatten/dense layer to output an x and y coordinate. We collected a data set of images taken from the Neato's camera and the approximate center of mass of the person based on an average of laser scan points in the frame of view of the camera. Because the image and lidar sampling happened at different rates, before training, each image was paired with a scan result with a maximum timestamp difference of 0.025s. Additionally, the images were scaled down to 200 x 150 pixels instead of 680 x 480. You can find our training code [here](https://colab.research.google.com/drive/1UaE06H4dS8kt_A7o_D8_NWij7EhDyHtn).
 
+The ground truth position of the person was taken as the average position of the laser scan points in the field of view of the camera which were less than 2 m away from the robot. Above, the red points are laser scan points, red arrows are the points contributing to person detection, and the green sphere represents the estimate of the person's position.
 ![](https://github.com/ksoltan/robot_learning/blob/master/documentation/data_record_ml_tag_video.gif)
-*Data collection included sampling camera images from the Neato. The ground truth position of the person was taken as the average position of the laser scan points in the field of view of the camera which were less than 2 m away from the robot. Above, the red points are laser scan points, red arrows are the points contributing to person detection, and the green sphere represents the estimate of the person's position.*
 
 The resulting model was unfortunately not very accurate, even on its own training data. There was an extremely high variability in the predicted person positions, as seen in the graphs below:
 
